@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #define MAX_ARGS 64
 
@@ -11,7 +13,15 @@ int main()
     size_t len = 0;
     while (1)
     {
-        printf("myshell> ");
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) != NULL)
+        {
+            printf("%s>", cwd);
+        }
+        else
+        {
+            printf("shell>");
+        }
         fflush(stdout);
 
         ssize_t nread = getline(&line, &len, stdin);
@@ -37,8 +47,6 @@ int main()
             break;
         }
 
-        printf("Command: %s\n", line);
-
         char *argv[MAX_ARGS];
         int argc = 0;
         int i = 0;
@@ -48,7 +56,7 @@ int main()
             {
                 i++;
             }
-            if (line[i] == "\0")
+            if (line[i] == '\0')
                 break;
             argv[argc++] = &line[i];
             while (line[i] != ' ' && line[i] != '\t' && line[i] != '\0')
@@ -63,11 +71,40 @@ int main()
         argv[argc] = NULL;
         if (argc == 0)
             continue;
-        // Debug argv
-        printf("argc: %d\n", argc);
-        for (int j = 0; argv[j] != NULL; j++)
+
+        if (strcmp(argv[0], "cd") == 0)
         {
-            printf("argv[%d] = '%s'\n", j, argv[j]);
+            const char *path;
+            if (argc == 1)
+            {
+                path = getenv("HOME");
+            }
+            else
+            {
+                path = argv[1];
+            }
+
+            if (path == NULL || chdir(path) != 0)
+            {
+                perror("cd");
+            }
+            continue;
+        }
+
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            execvp(argv[0], argv);
+            perror("execvp");
+            exit(0);
+        }
+        else if (pid > 0)
+        {
+            wait(NULL);
+        }
+        else
+        {
+            perror("fork");
         }
     }
 
